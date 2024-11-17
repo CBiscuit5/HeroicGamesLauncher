@@ -157,6 +157,8 @@ import {
   getGameSdl
 } from 'backend/storeManagers/legendary/library'
 import { storeMap } from 'common/utils'
+import { init as initComponentRegistry } from 'backend/components/registry'
+import { registerCoreComponents } from './components/core_components'
 
 app.commandLine?.appendSwitch('ozone-platform-hint', 'auto')
 
@@ -315,6 +317,8 @@ if (!gotTheLock) {
   })
   app.whenReady().then(async () => {
     initLogger()
+    await initComponentRegistry()
+    await registerCoreComponents()
     initOnlineMonitor()
     initStoreManagers()
     initImagesCache()
