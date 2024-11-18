@@ -83,7 +83,16 @@ async function invokeEvent<T extends keyof ComponentEvents>(
   eventName: T,
   ...args: Parameters<ComponentEvents[T]>
 ): Promise<void> {
-  const listeners = eventListeners[eventName] ?? []
+  const listeners = eventListeners[eventName]
+  if (!listeners) {
+    await logComponentMessage(
+      component.name,
+      `Invoked ${eventName}, but no listeners were registered`,
+      'WARNING'
+    )
+    return
+  }
+
   await Promise.all(
     listeners.map(async ([listenerComponent, listener]) => {
       await logComponentMessage(
