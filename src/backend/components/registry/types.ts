@@ -2,7 +2,7 @@
 There are 3 different types of "messages" components can use:
 - Events, which run in parallel and can't return a value
 - Producers, which run sequentially and *may* return a value
-- SingletonProducers, which are the same thing as Producers, except that
+- ExclusiveProducers, which are the same thing as Producers, except that
   only one can be registered for a message
 
 To better picture this, some examples:
@@ -31,7 +31,7 @@ interestingly, we could also have a runner-specific Producer (which only returns
 its Legendary/GOGDL/Nile/etc. command if it sees that a game from its storefront
 is being launched), meaning the entire launch flow could be store-agnostic
 
-SingletonProducers lastly can be seen more like global functions. Some examples
+ExclusiveProducers lastly can be seen more like global functions. Some examples
 for those might be anything to do with game settings, or store-specific things
 (EOS overlay). Note that even in those cases, the modularity of the components
 system can be helpful to make it easy to test functionality (it'd be as easy
@@ -52,9 +52,8 @@ even being able to enter a "Component debugger" that lets you pause/replay/skip
 messages
  */
 
-type ComponentEvents = Record<string, (...args: never[]) => void>
-// NOTE: Only Events are implemented in this PoC
-type ComponentProducers = Record<string, (...args: never[]) => never>
-type ComponentSingletonProducers = Record<string, (...args: never[]) => never>
+interface ComponentEvents {}
+interface ComponentProducers {}
+interface ComponentExclusiveProducers {}
 
-export type { ComponentEvents, ComponentProducers, ComponentSingletonProducers }
+export type { ComponentEvents, ComponentProducers, ComponentExclusiveProducers }

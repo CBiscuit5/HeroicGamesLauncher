@@ -3,7 +3,11 @@ import { appendFile, mkdir, writeFile } from 'fs/promises'
 import { componentLogFilePath, logBasePath } from './paths'
 
 import type { Component } from '../component'
-import type { ComponentEvents } from './types'
+import type {
+  ComponentEvents,
+  ComponentProducers,
+  ComponentExclusiveProducers
+} from './types'
 
 type EventListenerList = Partial<{
   [eventName in keyof ComponentEvents]: [
@@ -11,9 +15,29 @@ type EventListenerList = Partial<{
     ComponentEvents[eventName]
   ][]
 }>
+type ProducerList = Partial<{
+  [producerName in keyof ComponentProducers]: [
+    Component,
+    ComponentProducers[producerName]
+  ][]
+}>
+type SingletonProducerList = Partial<{
+  [producerName in keyof ComponentExclusiveProducers]: [
+    Component,
+    ComponentExclusiveProducers[producerName]
+  ]
+}>
 
 const components: Component[] = []
 const eventListeners: EventListenerList = {}
+const producers: ProducerList = {}
+const singletonProducers: SingletonProducerList = {}
+
+// Name to use for the "global component" (used when non-component parts of
+// Heroic interact with the component system)
+// FIXME: Remove this once everything interacting with this system is
+//        component-based
+const GLOBAL_COMPONENT_NAME = 'Global Component'
 
 async function init() {
   await initComponentLog()
@@ -75,18 +99,60 @@ async function addEventListener<T extends keyof ComponentEvents>(
     'DEBUG'
   )
   eventListeners[eventName] ||= []
-  eventListeners[eventName]!.push([component, callback])
+  eventListeners[eventName]?.push([component, callback])
+}
+
+async function addProducer<T extends keyof ComponentProducers>(
+  component: Component,
+  producerName: T,
+  producer: ComponentProducers[T]
+): Promise<void> {
+  await logComponentMessage(
+    component.name,
+    `Registering producer ${producerName}`,
+    'DEBUG'
+  )
+  producers[producerName] ||= [] as never
+  producers[producerName]?.push([component, producer])
+}
+
+async function addExclusiveProducer<
+  T extends keyof ComponentExclusiveProducers
+>(
+  component: Component,
+  producerName: T,
+  producer: ComponentExclusiveProducers[T]
+): Promise<void> {
+  const already_registered_singleton = singletonProducers[producerName]
+  if (already_registered_singleton) {
+    const [registered_component] = already_registered_singleton
+    await logComponentMessage(
+      component.name,
+      `Cannot add singleton producer ${producerName}, component ${registered_component.name} added one already`,
+      'ERROR'
+    )
+    return
+  }
+
+  await logComponentMessage(
+    component.name,
+    `Registering singleton producer ${producerName}`,
+    'DEBUG'
+  )
+  singletonProducers[producerName] = [component, producer as never]
 }
 
 async function invokeEvent<T extends keyof ComponentEvents>(
-  component: Component,
+  // FIXME: `undefined` here is a stopgap to let non-component parts of Heroic
+  //        interact with the component system
+  component: Component | undefined,
   eventName: T,
   ...args: Parameters<ComponentEvents[T]>
 ): Promise<void> {
   const listeners = eventListeners[eventName]
   if (!listeners) {
     await logComponentMessage(
-      component.name,
+      component?.name ?? GLOBAL_COMPONENT_NAME,
       `Invoked ${eventName}, but no listeners were registered`,
       'WARNING'
     )
@@ -96,15 +162,87 @@ async function invokeEvent<T extends keyof ComponentEvents>(
   await Promise.all(
     listeners.map(async ([listenerComponent, listener]) => {
       await logComponentMessage(
-        component.name,
+        component?.name ?? GLOBAL_COMPONENT_NAME,
         `Invoking callback for event ${eventName} on ${
           listenerComponent.name
         } with (${args.join(', ')})`,
         'DEBUG'
       )
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore This is actually fine if used as intended
       listener(...args)
     })
   )
 }
 
-export { init, registerComponent, addEventListener, invokeEvent }
+async function invokeProducers<T extends keyof ComponentProducers>(
+  component: Component | undefined,
+  producerName: T,
+  ...args: Parameters<ComponentProducers[T]>
+): Promise<ReturnType<ComponentProducers[T]>[]> {
+  const producerList = producers[producerName]
+  if (!producerList) {
+    await logComponentMessage(
+      component?.name ?? GLOBAL_COMPONENT_NAME,
+      `Invoked producer ${producerName}, but no producers were registered`,
+      'WARNING'
+    )
+    return []
+  }
+
+  return Promise.all(
+    producerList.map(async ([producerComponent, producer]) => {
+      await logComponentMessage(
+        component?.name ?? GLOBAL_COMPONENT_NAME,
+        `Invoking producer ${producerName} on ${
+          producerComponent.name
+        } with (${args.join(', ')})`,
+        'DEBUG'
+      )
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore This is actually fine if used as intended
+      return producer(...args)
+    })
+  )
+}
+
+async function invokeExclusiveProducer<
+  T extends keyof ComponentExclusiveProducers
+>(
+  component: Component | undefined,
+  producerName: T,
+  ...args: Parameters<ComponentExclusiveProducers[T]>
+): Promise<ReturnType<ComponentExclusiveProducers[T]>> {
+  const producer = singletonProducers[producerName]
+  if (!producer) {
+    await logComponentMessage(
+      component?.name ?? GLOBAL_COMPONENT_NAME,
+      `Invoked singleton producer ${producerName}, but no producer was registered`,
+      'WARNING'
+    )
+    throw new Error(`No singleton producer ${producerName} registered`)
+  }
+
+  const [producerComponent, producerFn] = producer
+  await logComponentMessage(
+    component?.name ?? GLOBAL_COMPONENT_NAME,
+    `Invoking singleton producer ${producerName} on ${
+      producerComponent.name
+    } with (${args.join(', ')})`,
+    'DEBUG'
+  )
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore This is actually fine if used as intended
+  return producerFn(...args)
+}
+
+export {
+  init,
+  registerComponent,
+  addEventListener,
+  addProducer,
+  addExclusiveProducer,
+  invokeEvent,
+  invokeProducers,
+  invokeExclusiveProducer
+}
