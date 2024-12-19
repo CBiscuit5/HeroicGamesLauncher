@@ -954,7 +954,7 @@ ipcMain.handle(
   'launch',
   async (
     event,
-    { appName, launchArguments, runner, skipVersionCheck }
+    { appName, launchArguments, runner, skipVersionCheck, args }
   ): StatusPromise => {
     const game = gameManagerMap[runner].getGameInfo(appName)
     const gameSettings = await gameManagerMap[runner].getSettings(appName)
@@ -1059,6 +1059,7 @@ ipcMain.handle(
     const command = gameManagerMap[runner].launch(
       appName,
       launchArguments,
+      args,
       skipVersionCheck
     )
 

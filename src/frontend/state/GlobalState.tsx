@@ -778,9 +778,10 @@ class GlobalState extends PureComponent<Props> {
     // Deals launching from protocol. Also checks if the game is already running
     window.api.handleLaunchGame(
       async (
-        e: IpcRendererEvent,
-        appName: string,
-        runner: Runner
+        e,
+        appName,
+        runner,
+        args
       ): Promise<{ status: 'done' | 'error' | 'abort' }> => {
         const currentApp = libraryStatus.filter(
           (game) => game.appName === appName
@@ -791,7 +792,8 @@ class GlobalState extends PureComponent<Props> {
             t,
             runner,
             hasUpdate: false,
-            showDialogModal: this.handleShowDialogModal
+            showDialogModal: this.handleShowDialogModal,
+            args
           })
         }
         return { status: 'error' }
